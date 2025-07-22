@@ -12,340 +12,255 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-  <style>
-    :root {
-      --bg: #f9fbff; --fg: #333;
-      --card: #fff; --buttonBg: #2d3e50; --buttonFg: #fff;
-    }
-    .dark {
-      --bg: #2b2e3b; --fg: #ddd;
-      --card: #3a3f4b; --buttonBg: #ddd; --buttonFg: #2d3e50;
-    }
-
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: 'Times New Roman', Times, serif;
-      background: var(--bg);
-      color: var(--fg);
-    }
-
-    .header {
-      text-align: center;
-      background: var(--buttonBg);
-      color: var(--buttonFg);
-      padding: 15px;
-      font-size: 24px;
-      font-weight: bold;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
-
-    .buttons {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 20px;
-    }
-
-    .buttons button {
-      padding: 8px 16px;
-      border: 1px solid var(--buttonBg);
-      background: var(--card);
-      color: var(--buttonBg);
-      font-weight: bold;
-      font-family: 'Times New Roman', Times, serif;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-
-    .buttons button:hover {
-      background: var(--buttonBg);
-      color: var(--buttonFg);
-    }
-
-    .chart-container {
-      width: 100%;
-      overflow-x: auto;
-    }
-
-    canvas {
-      width: 100% !important;
-      height: auto !important;
-      min-width: 600px;
-    }
-
-    .nav {
-      display: flex;
-      justify-content: center;
-      margin-top: 20px;
-    }
-
-    .card-tile {
-      text-decoration: none;
-      background: var(--card);
-      color: var(--buttonBg);
-      padding: 10px 25px;
-      border-radius: 16px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
-      font-size: 18px;
-      font-weight: bold;
-      font-family: 'Times New Roman', Times, serif;
-      transition: 0.2s;
-    }
-
-    .card-tile:hover {
-      transform: scale(1.05);
-      box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
-    }
-    
-    #loader {
-      display: none;
-      text-align: center;
-      margin-top: 20px;
-      font-size: 18px;
-      font-style: italic;
-    }
-
-    @media (max-width: 600px) {
-      canvas {
-        height: 60vh !important;
-      }
-    }
-
-    /* --- NEW SIDEBAR STYLES --- */
-    .menu-icon {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      width: 50px;
-      height: 40px;
-      background: var(--buttonBg);
-      color: var(--buttonFg);
-      border: none;
-      border-radius: 8px;
-      font-size: 24px;
-      cursor: pointer;
-      z-index: 1001;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .sidebar {
-      height: 100%;
-      width: 250px;
-      position: fixed;
-      z-index: 1000;
-      top: 0;
-      left: -250px; /* Initially hidden */
-      background-color: var(--card);
-      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-      padding-top: 80px;
-      transition: 0.3s;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 20px;
-    }
-    .sidebar.open {
-      left: 0;
-    }
-    .toggle-container {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .toggle {
-      background: var(--buttonBg);
-      color: var(--buttonFg);
-      border: none;
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      font-size: 24px;
-      cursor: pointer;
-    }
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script> <style>
+    /* Your existing styles */
   </style>
 </head>
 <body>
+  <header>
+    <div class="header-container">
+      <img src="favicon.jpg" alt="Beehive Icon" class="header-icon">
+      <h1>Beehive Monitor</h1>
+      <div class="header-links">
+        <a href="index.html">Live</a>
+        <a href="history.html" class="active">History</a>
+      </div>
+      <button id="themeToggle" class="theme-toggle-button">🌙</button>
+    </div>
+  </header>
 
-<button class="menu-icon" onclick="toggleSidebar()">&#9776;</button>
+  <main>
+    <div class="loader-container" id="loader">
+      <div class="loader"></div>
+      <p>Loading data...</p>
+    </div>
 
-<div id="sidebar" class="sidebar">
-  <h3>Settings</h3>
-  <div class="toggle-container">
-    <span>Theme</span>
-    <button class="toggle" onclick="toggleDark()">🌙</button>
-  </div>
-</div>
-
-  <div class="header">🐝 Beehive Temp, Humidity & Air Purity Monitor</div>
-
-  <div class="buttons">
-    <button onclick="loadData('live')">Live</button>
-    <button onclick="loadData('24h')">24H</button>
-    <button onclick="loadData('7d')">7D</button>
-    <button onclick="loadData('15d')">15D</button>
-    <button onclick="loadData('30d')">30D</button>
-  </div>
-
-  <div class="chart-container">
-    <canvas id="chart"></canvas>
-    <div id="loader">Loading chart...</div>
-  </div>
-
-  <div class="nav">
-    <a href="index.html" class="card-tile">Back to Home</a>
-  </div>
+    <div class="chart-controls">
+      <select id="dataType">
+        <option value="temperature">Temperature</option>
+        <option value="humidity">Humidity</option>
+        <option value="air_quality">Air Quality</option>
+      </select>
+      <select id="dateRange">
+        <option value="1h">Last Hour</option>
+        <option value="24h">Last 24 Hours</option>
+        <option value="7d">Last 7 Days</option>
+        <option value="30d">Last 30 Days</option>
+      </select>
+    </div>
+    <div class="chart-container">
+      <canvas id="historyChart"></canvas>
+    </div>
+  </main>
 
   <script>
-    // NEW: Sidebar toggle function
-    function toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('open');
-    }
-
-    if (localStorage.dark === 'true') document.body.classList.add('dark');
-    function toggleDark() {
-      document.body.classList.toggle('dark');
-      localStorage.dark = document.body.classList.contains('dark');
-    }
-
-    const fb = {
+    // Your Firebase project configuration - NOW WITH YOUR ACTUAL VALUES
+    const firebaseConfig = {
       apiKey: "AIzaSyD4M_ZOMqR9MtSkbgH2SQQvj2QSAFKLOhU",
       authDomain: "beehive-d31e3.firebaseapp.com",
       databaseURL: "https://beehive-d31e3-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "beehive-d31e3",
+      storageBucket: "beehive-d31e3.firebasestorage.app",
+      messagingSenderId: "412298384436",
+      appId: "1:412298384436:web:469569b024f27482456661",
+      measurementId: "G-P6FF4EJC3K"
     };
-    firebase.initializeApp(fb);
-    const db = firebase.database();
 
-    let chart;
-    const ctx = document.getElementById('chart').getContext('2d');
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    // No need to initialize messaging here unless you specifically want FCM features on this page
+
+    // --- Your existing Chart.js and history data loading logic ---
+    const loaderEl = document.getElementById('loader');
+    const dataTypeSelect = document.getElementById('dataType');
+    const dateRangeSelect = document.getElementById('dateRange');
+    const historyChartCanvas = document.getElementById('historyChart');
+    let myHistoryChart; // To hold the Chart.js instance
+
+    // Function to get chart options (assuming this is already defined in your app)
+    function getChartOptions(range, tooltipLabels) {
+        // ... your existing getChartOptions logic ...
+        // Example placeholder:
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return tooltipLabels[context[0].dataIndex];
+                        }
+                    }
+                },
+                zoom: {
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        mode: 'x',
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'x'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'category',
+                    ticks: {
+                        color: document.body.classList.contains('dark') ? '#ddd' : '#333'
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: document.body.classList.contains('dark') ? '#ddd' : '#333'
+                    }
+                }
+            }
+        };
+    }
+
 
     function createChart(labels, temps, hums, airs, fullLabels) {
-      if (chart) chart.destroy();
-
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            { label: '🌡 Temp (°C)', data: temps, borderColor: '#ff5733', fill: false, tension: 0.3 },
-            { label: '💧 Humidity (%)', data: hums, borderColor: '#3399ff', fill: false, tension: 0.3 },
-            { label: '🍃 Air Purity (%)', data: airs, borderColor: '#22bb66', fill: false, tension: 0.3 }
-          ]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'top' },
-            tooltip: {
-              callbacks: {
-                title: (items) => fullLabels[items[0].dataIndex] || items[0].label
-              }
-            },
-            zoom: {
-              pan: { enabled: true, mode: 'x' },
-              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
-            }
-          },
-          scales: {
-            x: {
-              ticks: {
-                autoSkip: false,
-                maxRotation: 0,
-                callback: function(val, i) {
-                  return this.getLabelForValue(val) || '';
-                }
-              },
-              grid: {
-                color: (ctx) => {
-                  const label = chart.data.labels[ctx.tick.value];
-                  return label?.endsWith(':00') || label?.endsWith(':30') ? '#888' : 'transparent';
-                }
-              }
-            },
-            y: {
-              beginAtZero: true,
-              grid: { color: '#999' }
-            }
-          }
+        if (myHistoryChart) {
+            myHistoryChart.destroy();
         }
-      });
+
+        const selectedDataType = dataTypeSelect.value;
+        let dataPoints = [];
+        let labelText = '';
+        let borderColor = '';
+
+        if (selectedDataType === 'temperature') {
+            dataPoints = temps;
+            labelText = 'Temperature (°C)';
+            borderColor = '#FF6384';
+        } else if (selectedDataType === 'humidity') {
+            dataPoints = hums;
+            labelText = 'Humidity (%)';
+            borderColor = '#36A2EB';
+        } else if (selectedDataType === 'air_quality') {
+            dataPoints = airs;
+            labelText = 'Air Quality (%)';
+            borderColor = '#FFCE56';
+        }
+
+        myHistoryChart = new Chart(historyChartCanvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: labelText,
+                    data: dataPoints,
+                    borderColor: borderColor,
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: getChartOptions(dateRangeSelect.value, fullLabels) // Pass range and fullLabels
+        });
     }
 
     function loadData(range) {
-      document.getElementById('loader').style.display = 'block';
-
-      db.ref('history').once('value').then(snap => {
-        const raw = snap.val() || {};
-        const labels = [], temps = [], hums = [], airs = [], fullLabels = [];
+        loaderEl.style.display = 'flex';
+        let startTime;
         const now = new Date();
-        const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-        const cutoffs = {
-          live: now.getTime() - 30 * 60000,
-          '24h': midnight,
-          '7d': now.getTime() - 7 * 86400000,
-          '15d': now.getTime() - 15 * 86400000,
-          '30d': now.getTime() - 30 * 86400000
-        };
-        const cutoff = cutoffs[range];
-        const shownDates = new Set();
+        if (range === '1h') {
+            startTime = new Date(now.getTime() - 60 * 60 * 1000);
+        } else if (range === '24h') {
+            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        } else if (range === '7d') {
+            startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (range === '30d') {
+            startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        } else { // Default to 24h if no valid range
+            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        }
 
-        Object.entries(raw).sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
-          const d = new Date(k);
-          const t = d.getTime();
-          if (t >= cutoff) {
-            const hour = d.getHours().toString().padStart(2, '0');
-            const min = d.getMinutes().toString().padStart(2, '0');
-            const time = `${hour}:${min}`;
-            const date = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
-            const full = `${date} ${time}`;
-            let label = '';
+        const startTimestamp = startTime.toISOString().replace(/[:.]/g, '-'); // Format for Firebase key
+        const endTimestamp = now.toISOString().replace(/[:.]/g, '-');
 
-            if (range === 'live') {
-              if (min === '00' || min === '30') label = time;
-            } else if (range === '24h') {
-              if (min === '00') label = time;
-            } else {
-              if (!shownDates.has(date)) {
-                label = date;
-                shownDates.add(date);
-              }
+        database.ref('/history/')
+            .orderByKey()
+            .startAt(startTimestamp)
+            .endAt(endTimestamp)
+            .once('value', (snapshot) => {
+                const data = snapshot.val();
+                const labels = [];
+                const temps = [];
+                const hums = [];
+                const airs = [];
+                const fullLabels = [];
+                const shownDates = new Set();
+
+                if (data) {
+                    Object.keys(data).sort().forEach(key => {
+                        const v = data[key];
+                        const d = new Date(key.replace(/-/g, ':').replace('T', ' ')); // Convert back to readable date
+                        const hour = d.getHours().toString().padStart(2, '0');
+                        const min = d.getMinutes().toString().padStart(2, '0');
+                        const time = `${hour}:${min}`;
+                        const date = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+                        const full = `${date} ${time}`;
+                        let label = '';
+
+                        // Logic for labels on X-axis (similar to your existing HTML)
+                        if (range === '1h' || range === '24h') {
+                            if (min === '00' || (range === '1h' && ['15', '30', '45'].includes(min))) {
+                                label = time;
+                            }
+                        } else { // 7d, 30d
+                            if (!shownDates.has(date)) {
+                                label = date;
+                                shownDates.add(date);
+                            }
+                        }
+
+                        labels.push(label);
+                        temps.push(v.temperature);
+                        hums.push(v.humidity);
+                        airs.push(v.air_quality);
+                        fullLabels.push(full);
+                    });
+                }
+
+                createChart(labels, temps, hums, airs, fullLabels);
+                loaderEl.style.display = 'none';
+            }).catch(err => {
+                console.error("Error loading history:", err);
+                loaderEl.style.display = 'none';
+            });
+    }
+
+    // Event listeners for data type and range changes
+    dataTypeSelect.addEventListener('change', () => loadData(dateRangeSelect.value));
+    dateRangeSelect.addEventListener('change', () => loadData(dateRangeSelect.value));
+
+
+    // Initial load for the history page
+    loadData(dateRangeSelect.value); // Load data based on default selection
+
+    // Theme toggle (copy from index.html if you want it here too)
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark');
+            const isDark = document.body.classList.contains('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            // Update chart colors if theme changes
+            if (myHistoryChart) {
+                myHistoryChart.options.scales.x.ticks.color = isDark ? '#ddd' : '#333';
+                myHistoryChart.options.scales.y.ticks.color = isDark ? '#ddd' : '#333';
+                myHistoryChart.update();
             }
-
-            labels.push(label);
-            temps.push(v.temperature);
-            hums.push(v.humidity);
-            airs.push(v.air_quality);
-            fullLabels.push(full);
-          }
         });
-
-        createChart(labels, temps, hums, airs, fullLabels);
-        document.getElementById('loader').style.display = 'none';
-      });
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark');
+        }
     }
 
-    loadData('live');
-  </script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
-          .then(registration => {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
-          })
-          .catch(err => {
-            console.log('ServiceWorker registration failed: ', err);
-          });
-      });
-    }
   </script>
 </body>
 </html>
