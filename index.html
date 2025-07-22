@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Beehive Monitor - Live</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="favicon.png" type="image/png">
+  <meta name="theme-color" content="#2d3e50"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    :root {
+      --bg: #f9fbff; --fg: #333;
+      --card: #fff; --buttonBg: #2d3e50; --buttonFg: #fff;
+      --chartText: #333;
+    }
+    .dark {
+      --bg: #2b2e3b; --fg: #ddd;
+      --card: #3a3f4b; --buttonBg: #ddd; --buttonFg: #2d3e50;
+      --chartText: #ddd;
+    }
+    body { margin:0; padding:20px; font-family:'Times New Roman',Times,serif; background:var(--bg); color:var(--fg); transition: background-color 0.3s, color 0.3s; }
+    .header { text-align:center; background:var(--buttonBg); color:var(--buttonFg); padding:15px; border-radius:8px; margin-bottom:20px; font-size:24px; font-weight:bold; }
+    .container { display:flex; flex-wrap:wrap; gap:20px; justify-content:center; }
+    .card { background:var(--card); width:220px; padding:20px; border-radius:12px; border:4px solid transparent; box-shadow:0 4px 12px rgba(0,0,0,0.08); text-align:center; cursor:pointer; transition:0.2s; }
+    .card:hover { transform:scale(1.03); }
+    .emoji { font-size:36px; margin-bottom:10px; }
+    .label { font-weight:600; font-size:18px; margin-bottom:5px; }
+    .value { font-size:24px; }
+    .chart-container { display:none; opacity:0; margin:10px auto; max-width:800px; background:var(--card); padding:20px; border-radius:12px; box-shadow:0 0 10px rgba(0,0,0,0.1); transform:translateY(30px); transition:all 0.5s ease; }
+    .chart-container.show { display:block; opacity:1; transform:translateY(0); }
+    .pulse { animation:pulseBorder 1s infinite; }
+    @keyframes pulseBorder { 0% { box-shadow:0 0 0 0 rgba(231,76,60,0.6); } 70% { box-shadow:0 0 0 10px rgba(231,76,60,0); } }
+    .chart-buttons { text-align:center; margin-bottom:10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .chart-buttons button { padding: 8px 16px; border: 1px solid var(--buttonBg); background: var(--card); color: var(--buttonBg); font-weight: bold; font-family: 'Times New Roman', Times, serif; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    .chart-buttons button:hover, .chart-buttons button.active { background: var(--buttonBg); color: var(--buttonFg); }
+    #loader { display: none; text-align: center; margin-top: 20px; font-size: 18px; font-style: italic; }
+
+    /* --- Sidebar and Menu Icon Styles --- */
+    .menu-icon {
+     position: fixed;
+     top: 20px;
+     left: 20px;
+     width: 40px;
+     height: 35px;
+     background: none;
+     border: none;
+     cursor: pointer;
+     z-index: 1001;
+     display: flex;
+     flex-direction: column;
+     justify-content: center;
+     gap: 5px;
+     padding: 5px;
+    }
+    .menu-icon span {
+      display: block;
+      height: 4px;
+      width: 100%;
+      background-color: #000;
+      border-radius: 2px;
+      transition: all 0.3s ease-in-out;
+    }
+    .menu-icon.open span:nth-child(1) {
+      transform: translateY(9px) rotate(45deg);
+    }
+    .menu-icon.open span:nth-child(2) {
+      opacity: 0;
+    }
+    .menu-icon.open span:nth-child(3) {
+      transform: translateY(-9px) rotate(-45deg);
+    }
+    .sidebar {
+      height: 100%;
+      width: 250px;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: -250px;
+      background-color: var(--card);
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      padding-top: 80px;
+      transition: 0.3s ease-in-out;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .sidebar.open {
+      left: 0;
+    }
+    #connection-status {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .toggle {
+      background: var(--buttonBg);
+      color: var(--buttonFg);
+      border: none;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .sidebar .card-tile {
+      text-decoration: none;
+      background: var(--card);
+      color: var(--buttonBg);
+      border: 1px solid var(--buttonBg);
+      padding: 10px 25px;
+      border-radius: 16px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+      font-size: 14px;
+      font-weight: bold;
+      font-family: 'Times New Roman', Times, serif;
+      transition: 0.2s;
+      cursor: pointer;
+    }
+    .sidebar .card-tile:hover {
+       background: var(--buttonBg);
+       color: var(--buttonFg);
+    }
+    /* --- ADDED: Style for when the button is disabled --- */
+    .sidebar .card-tile:disabled {
+        cursor: not-allowed;
+        background-color: #eee;
+        color: #888;
+        border-color: #ccc;
+    }
+    .dark .sidebar .card-tile:disabled {
+        background-color: #555;
+        color: #aaa;
+        border-color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<button class="menu-icon" onclick="toggleSidebar()">
+  <span></span>
+  <span></span>
+  <span></span>
+</button>
+
+<div id="sidebar" class="sidebar">
+  <h3>Settings</h3>
+  <div id="connection-status">Checking status...</div>
+  <div class="toggle-container">
+    <span>Theme</span>
+    <button class="toggle" onclick="toggleDark()">🌙</button>
+  </div>
+  <button id="notificationBtn" class="card-tile" onclick="enableNotifications()">Enable Notifications</button>
+</div>
+
+<audio id="alertSound" src="alert.mp3" preload="auto" loop></audio>
+<div class="header">🐝 Beehive Monitor - Live</div>
+
+<div class="container">
+  <div class="card" id="card-temp" onclick="toggleChart('temp')">
+    <div class="emoji">🌡️</div><div class="label">Temperature</div><div class="value"><span id="temp">--</span> °C</div>
+  </div>
+  <div class="card" id="card-hum" onclick="toggleChart('hum')">
+    <div class="emoji">💧</div><div class="label">Humidity</div><div class="value"><span id="hum">--</span> %</div>
+  </div>
+  <div class="card" id="card-air" onclick="toggleChart('air')">
+    <div class="emoji">🧪</div><div class="label">Air Purity</div><div class="value"><span id="air">--</span> %</div>
+  </div>
+</div>
+
+<div id="chart-temp" class="chart-container">
+  <div class="chart-buttons">
+    <button onclick="setRange('temp','live', this)">Live</button>
+    <button onclick="setRange('temp','1h', this)">1H</button>
+    <button onclick="setRange('temp','24h', this)">24H</button>
+    <button onclick="setRange('temp','7d', this)">7D</button>
+    <button onclick="setRange('temp','15d', this)">15D</button>
+    <button onclick="setRange('temp','30d', this)">30D</button>
+  </div><canvas id="chartTempCanvas"></canvas>
+</div>
+<div id="chart-hum" class="chart-container">
+  <div class="chart-buttons">
+    <button onclick="setRange('hum','live', this)">Live</button>
+    <button onclick="setRange('hum','1h', this)">1H</button>
+    <button onclick="setRange('hum','24h', this)">24H</button>
+    <button onclick="setRange('hum','7d', this)">7D</button>
+    <button onclick="setRange('hum','15d', this)">15D</button>
+    <button onclick="setRange('hum','30d', this)">30D</button>
+  </div><canvas id="chartHumCanvas"></canvas>
+</div>
+<div id="chart-air" class="chart-container">
+  <div class="chart-buttons">
+    <button onclick="setRange('air','live', this)">Live</button>
+    <button onclick="setRange('air','1h', this)">1H</button>
+    <button onclick="setRange('air','24h', this)">24H</button>
+    <button onclick="setRange('air','7d', this)">7D</button>
+    <button onclick="setRange('air','15d', this)">15D</button>
+    <button onclick="setRange('air','30d', this)">30D</button>
+  </div><canvas id="chartAirCanvas"></canvas>
+</div>
+<div id="loader">Loading chart...</div>
+
+<script>
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.querySelector('.menu-icon').classList.toggle('open');
+  }
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD4M_ZOMqR9MtSkbgH2SQQvj2QSAFKLOhU",
+    authDomain: "beehive-d31e3.firebaseapp.com",
+    databaseURL: "https://beehive-d31e3-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "beehive-d31e3",
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const audio = document.getElementById("alertSound");
+  const statusEl = document.getElementById("connection-status");
+  const loaderEl = document.getElementById("loader");
+
+  if (localStorage.dark === 'true') document.body.classList.add('dark');
+  function toggleDark() {
+    document.body.classList.toggle('dark');
+    localStorage.dark = document.body.classList.contains('dark');
+    updateChartThemes();
+  }
+
+  // MODIFIED: This function now just handles the permission request
+  function enableNotifications() {
+    Notification.requestPermission().then(permission => {
+      // After the user makes a choice, update the button state
+      updateNotificationButtonStatus(); 
+    });
+  }
+  
+  // NEW: This function checks permission and updates the button
+  function updateNotificationButtonStatus() {
+    // Check if Notifications are even supported by the browser
+    if (!('Notification' in window)) {
+        document.getElementById('notificationBtn').textContent = 'Not Supported';
+        document.getElementById('notificationBtn').disabled = true;
+        return;
+    }
+    
+    const notificationBtn = document.getElementById('notificationBtn');
+    switch (Notification.permission) {
+        case 'granted':
+            notificationBtn.textContent = 'Notification Enabled';
+            notificationBtn.disabled = true;
+            break;
+        case 'denied':
+            notificationBtn.textContent = 'Notifications Blocked';
+            notificationBtn.disabled = true;
+            break;
+        default: // 'default'
+            notificationBtn.textContent = 'Enable Notifications';
+            notificationBtn.disabled = false;
+            break;
+    }
+  }
+
+  const liveLabels = [];
+  const liveData = { temp: [], hum: [], air: [] };
+  const CHART_HISTORY_LENGTH = 30;
+
+  function getChartOptions(range = 'live', tooltipLabels = []) {
+    const color = getComputedStyle(document.body).getPropertyValue('--chartText');
+    const isLongRange = ['7d', '15d', '30d'].includes(range);
+
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          ticks: {
+            color,
+            autoSkip: !['1h', '24h'].includes(range),
+            maxRotation: 0,
+            maxTicksLimit: isLongRange ? 8 : 12,
+          },
+          grid: { color: 'rgba(150,150,150,0.1)' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color },
+          grid: { color: 'rgba(150,150,150,0.1)' }
+        }
+      },
+      plugins: {
+        legend: { labels: { color } },
+        tooltip: {
+            callbacks: { title: (items) => tooltipLabels[items[0].dataIndex] || items[0].label }
+        },
+        zoom: {
+          pan: { enabled: true, mode: 'x' },
+          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+        }
+      }
+    };
+  }
+  
+  const chartTemp = new Chart(document.getElementById("chartTempCanvas"), { type: "line", options: getChartOptions(), data: { datasets: [{label: "Temperature (°C)", borderColor: "#f39c12", tension: 0.4}] } });
+  const chartHum = new Chart(document.getElementById("chartHumCanvas"), { type: "line", options: getChartOptions(), data: { datasets: [{label: "Humidity (%)", borderColor: "#3498db", tension: 0.4}] } });
+  const chartAir = new Chart(document.getElementById("chartAirCanvas"), { type: "line", options: getChartOptions(), data: { datasets: [{label: "Air Purity (%)", borderColor: "#2ecc71", tension: 0.4}] } });
+  const charts = { temp: chartTemp, hum: chartHum, air: chartAir };
+
+  function updateChartThemes() {
+    Object.values(charts).forEach(c => {
+      const currentRange = c.canvas.parentElement.dataset.range || 'live';
+      const tooltipLabels = c.data.tooltipLabels || [];
+      c.options = getChartOptions(currentRange, tooltipLabels);
+      c.update('none');
+    });
+  }
+  
+  function toggleChart(type) {
+    ['temp', 'hum', 'air'].forEach(sensor => {
+      const el = document.getElementById(`chart-${sensor}`);
+      const shouldShow = sensor === type ? !el.classList.contains("show") : false;
+      el.classList.toggle("show", shouldShow);
+      if(shouldShow) {
+        const liveButton = el.querySelector('.chart-buttons button');
+        setRange(type, 'live', liveButton);
+      }
+    });
+  }
+
+  function updateCardBorder(el, danger) { el.classList.toggle('pulse', danger); el.style.borderColor = danger ? "#e74c3c" : "#2ecc71"; }
+  function showNotification(t, b) { if (Notification.permission === "granted") { new Notification(t, { body: b }); navigator.vibrate?.([300, 200, 300]); } }
+  function formatTimeAgo(ts) { const diff = (Date.now() - new Date(ts)) / 1000; if (diff < 60) return `${Math.floor(diff)}s ago`; if (diff < 3600) return `${Math.floor(diff / 60)}m ago`; return new Date(ts).toLocaleTimeString(); }
+  
+  db.ref(".info/connected").on("value", snap => { statusEl.textContent = snap.val() ? "Firebase Online" : "Firebase Offline"; });
+  
+  db.ref("beehive").on("value", snap => {
+    const d = snap.val() || {};
+    const t = Number(d.temperature), h = Number(d.humidity), a = Number(d.air_quality);
+    document.getElementById("temp").textContent = isNaN(t) ? "--" : t;
+    document.getElementById("hum").textContent = isNaN(h) ? "--" : h;
+    document.getElementById("air").textContent = isNaN(a) ? "--" : a;
+
+    liveLabels.push(new Date().toLocaleTimeString());
+    liveData.temp.push(t); liveData.hum.push(h); liveData.air.push(a);
+    if (liveLabels.length > CHART_HISTORY_LENGTH) {
+      liveLabels.shift();
+      Object.keys(liveData).forEach(k => liveData[k].shift());
+    }
+    
+    ['temp', 'hum', 'air'].forEach(type => {
+      const chartContainer = document.getElementById(`chart-${type}`);
+      if (chartContainer.dataset.range === 'live') {
+          const chart = charts[type];
+          chart.data.labels = liveLabels;
+          chart.data.datasets[0].data = liveData[type];
+          chart.options = getChartOptions('live', liveLabels);
+          chart.update();
+      }
+    });
+    
+    updateCardBorder(document.getElementById("card-temp"), t < 18 || t > 30);
+    updateCardBorder(document.getElementById("card-hum"), h < 60);
+    updateCardBorder(document.getElementById("card-air"), a < 60);
+    if (t < 18 || t > 30 || h < 60 || a < 60) { if (audio.paused) audio.play(); showNotification("🚨 Abnormal Sensor", "Critical values detected!"); } else { audio.pause(); audio.currentTime = 0; }
+    const last = d.last_time;
+    if (last) {
+      const diff = (Date.now() - new Date(last)) / 1000;
+      if (diff < 15) { statusEl.textContent = "Device Online"; statusEl.style.background = "#d4edda"; statusEl.style.color = "#155724"; }
+      else { statusEl.textContent = `Offline – Last seen ${formatTimeAgo(last)}`; statusEl.style.background = "#f8d7da"; statusEl.style.color = "#721c24"; }
+    }
+  });
+
+  function setRange(sensorType, range, btnElement) {
+    const chartContainer = document.getElementById(`chart-${sensorType}`);
+    chartContainer.dataset.range = range;
+
+    const buttons = chartContainer.querySelectorAll('.chart-buttons button');
+    buttons.forEach(b => b.classList.remove('active'));
+    if(btnElement) btnElement.classList.add('active');
+
+    const chart = charts[sensorType];
+    
+    if (range === 'live') {
+      chart.options = getChartOptions('live', liveLabels);
+      chart.data.labels = liveLabels;
+      chart.data.datasets[0].data = liveData[sensorType];
+      chart.update();
+      chart.resetZoom();
+      return;
+    }
+
+    loaderEl.style.display = 'block';
+    db.ref('history').once('value').then(snap => {
+      const raw = snap.val() || {};
+      const labels = [], points = [], tooltipLabels = [];
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      const cutoffs = {
+        '1h': now.getTime() - 3600000,
+        '24h': midnight,
+        '7d': now.getTime() - 7 * 86400000,
+        '15d': now.getTime() - 15 * 86400000,
+        '30d': now.getTime() - 30 * 86400000
+      };
+      const cutoff = cutoffs[range];
+      const dataKey = sensorType === 'temp' ? 'temperature' : sensorType === 'hum' ? 'humidity' : 'air_quality';
+
+      Object.entries(raw).sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
+        const d = new Date(k);
+        const t = d.getTime();
+        if (t >= cutoff) {
+          const hour = d.getHours().toString().padStart(2, '0');
+          const min = d.getMinutes().toString().padStart(2, '0');
+          const time = `${hour}:${min}`;
+          const date = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+          const fullLabel = `${date} ${time}`;
+          
+          let displayLabel = '';
+
+          if (range === '1h') {
+            if (['00', '15', '30', '45'].includes(min)) {
+              displayLabel = time;
+            }
+          } else if (range === '24h') {
+            if (min === '00') {
+              displayLabel = time;
+            }
+          } else {
+            displayLabel = fullLabel;
+          }
+          
+          labels.push(displayLabel);
+          points.push(v[dataKey]);
+          tooltipLabels.push(fullLabel);
+        }
+      });
+      
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = points;
+      chart.data.tooltipLabels = tooltipLabels; 
+      chart.options = getChartOptions(range, tooltipLabels);
+      chart.update();
+      chart.resetZoom();
+      loaderEl.style.display = 'none';
+    }).catch(err => {
+        console.error("Error loading history:", err);
+        loaderEl.style.display = 'none';
+    });
+  }
+
+  // Set the initial state of the notification button when the page loads
+  updateNotificationButtonStatus();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(registration => {
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        })
+        .catch(err => {
+          console.log('ServiceWorker registration failed: ', err);
+        });
+    });
+  }
+</script>
+</body>
+</html>

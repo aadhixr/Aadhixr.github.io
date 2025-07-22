@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Beehive Monitor - History</title>
+  <meta name="theme-color" content="#2d3e50"/>
+  <link rel="icon" href="favicon.jpg" type="image/jpeg">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    :root {
+      --bg: #f9fbff; --fg: #333;
+      --card: #fff; --buttonBg: #2d3e50; --buttonFg: #fff;
+    }
+    .dark {
+      --bg: #2b2e3b; --fg: #ddd;
+      --card: #3a3f4b; --buttonBg: #ddd; --buttonFg: #2d3e50;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Times New Roman', Times, serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+
+    .header {
+      text-align: center;
+      background: var(--buttonBg);
+      color: var(--buttonFg);
+      padding: 15px;
+      font-size: 24px;
+      font-weight: bold;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .buttons button {
+      padding: 8px 16px;
+      border: 1px solid var(--buttonBg);
+      background: var(--card);
+      color: var(--buttonBg);
+      font-weight: bold;
+      font-family: 'Times New Roman', Times, serif;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .buttons button:hover {
+      background: var(--buttonBg);
+      color: var(--buttonFg);
+    }
+
+    .chart-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+      min-width: 600px;
+    }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .card-tile {
+      text-decoration: none;
+      background: var(--card);
+      color: var(--buttonBg);
+      padding: 10px 25px;
+      border-radius: 16px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+      font-size: 18px;
+      font-weight: bold;
+      font-family: 'Times New Roman', Times, serif;
+      transition: 0.2s;
+    }
+
+    .card-tile:hover {
+      transform: scale(1.05);
+      box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
+    }
+    
+    #loader {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+      font-size: 18px;
+      font-style: italic;
+    }
+
+    @media (max-width: 600px) {
+      canvas {
+        height: 60vh !important;
+      }
+    }
+
+    /* --- NEW SIDEBAR STYLES --- */
+    .menu-icon {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 50px;
+      height: 40px;
+      background: var(--buttonBg);
+      color: var(--buttonFg);
+      border: none;
+      border-radius: 8px;
+      font-size: 24px;
+      cursor: pointer;
+      z-index: 1001;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .sidebar {
+      height: 100%;
+      width: 250px;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: -250px; /* Initially hidden */
+      background-color: var(--card);
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      padding-top: 80px;
+      transition: 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .sidebar.open {
+      left: 0;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .toggle {
+      background: var(--buttonBg);
+      color: var(--buttonFg);
+      border: none;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      font-size: 24px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<button class="menu-icon" onclick="toggleSidebar()">&#9776;</button>
+
+<div id="sidebar" class="sidebar">
+  <h3>Settings</h3>
+  <div class="toggle-container">
+    <span>Theme</span>
+    <button class="toggle" onclick="toggleDark()">🌙</button>
+  </div>
+</div>
+
+  <div class="header">🐝 Beehive Temp, Humidity & Air Purity Monitor</div>
+
+  <div class="buttons">
+    <button onclick="loadData('live')">Live</button>
+    <button onclick="loadData('24h')">24H</button>
+    <button onclick="loadData('7d')">7D</button>
+    <button onclick="loadData('15d')">15D</button>
+    <button onclick="loadData('30d')">30D</button>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="chart"></canvas>
+    <div id="loader">Loading chart...</div>
+  </div>
+
+  <div class="nav">
+    <a href="index.html" class="card-tile">Back to Home</a>
+  </div>
+
+  <script>
+    // NEW: Sidebar toggle function
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    if (localStorage.dark === 'true') document.body.classList.add('dark');
+    function toggleDark() {
+      document.body.classList.toggle('dark');
+      localStorage.dark = document.body.classList.contains('dark');
+    }
+
+    const fb = {
+      apiKey: "AIzaSyD4M_ZOMqR9MtSkbgH2SQQvj2QSAFKLOhU",
+      authDomain: "beehive-d31e3.firebaseapp.com",
+      databaseURL: "https://beehive-d31e3-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "beehive-d31e3",
+    };
+    firebase.initializeApp(fb);
+    const db = firebase.database();
+
+    let chart;
+    const ctx = document.getElementById('chart').getContext('2d');
+
+    function createChart(labels, temps, hums, airs, fullLabels) {
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: '🌡 Temp (°C)', data: temps, borderColor: '#ff5733', fill: false, tension: 0.3 },
+            { label: '💧 Humidity (%)', data: hums, borderColor: '#3399ff', fill: false, tension: 0.3 },
+            { label: '🍃 Air Purity (%)', data: airs, borderColor: '#22bb66', fill: false, tension: 0.3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                title: (items) => fullLabels[items[0].dataIndex] || items[0].label
+              }
+            },
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                autoSkip: false,
+                maxRotation: 0,
+                callback: function(val, i) {
+                  return this.getLabelForValue(val) || '';
+                }
+              },
+              grid: {
+                color: (ctx) => {
+                  const label = chart.data.labels[ctx.tick.value];
+                  return label?.endsWith(':00') || label?.endsWith(':30') ? '#888' : 'transparent';
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: '#999' }
+            }
+          }
+        }
+      });
+    }
+
+    function loadData(range) {
+      document.getElementById('loader').style.display = 'block';
+
+      db.ref('history').once('value').then(snap => {
+        const raw = snap.val() || {};
+        const labels = [], temps = [], hums = [], airs = [], fullLabels = [];
+        const now = new Date();
+        const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+        const cutoffs = {
+          live: now.getTime() - 30 * 60000,
+          '24h': midnight,
+          '7d': now.getTime() - 7 * 86400000,
+          '15d': now.getTime() - 15 * 86400000,
+          '30d': now.getTime() - 30 * 86400000
+        };
+        const cutoff = cutoffs[range];
+        const shownDates = new Set();
+
+        Object.entries(raw).sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
+          const d = new Date(k);
+          const t = d.getTime();
+          if (t >= cutoff) {
+            const hour = d.getHours().toString().padStart(2, '0');
+            const min = d.getMinutes().toString().padStart(2, '0');
+            const time = `${hour}:${min}`;
+            const date = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+            const full = `${date} ${time}`;
+            let label = '';
+
+            if (range === 'live') {
+              if (min === '00' || min === '30') label = time;
+            } else if (range === '24h') {
+              if (min === '00') label = time;
+            } else {
+              if (!shownDates.has(date)) {
+                label = date;
+                shownDates.add(date);
+              }
+            }
+
+            labels.push(label);
+            temps.push(v.temperature);
+            hums.push(v.humidity);
+            airs.push(v.air_quality);
+            fullLabels.push(full);
+          }
+        });
+
+        createChart(labels, temps, hums, airs, fullLabels);
+        document.getElementById('loader').style.display = 'none';
+      });
+    }
+
+    loadData('live');
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          })
+          .catch(err => {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
